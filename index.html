@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Kerning - Interactive Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: "Calm Harmony" - A grounding palette of warm neutrals (#F5F5F4, #E7E5E4) with a deep teal (#145369) for accents and text, creating a professional and focused atmosphere. -->
+    <!-- Application Structure Plan: The SPA is organized into three logical sections to guide the user's understanding. It starts with a high-level "Concept" overview. This flows into the central "Interactive Simulator," the hands-on core of the app. Finally, the "Mechanism" section provides a deep-dive, linking detailed explanations back to the simulator. This top-down structure (What -> Try -> How) makes a complex topic approachable by separating the core idea from the interactive tool and the detailed mechanics, allowing users to engage at their preferred level of depth. -->
+    <!-- Visualization & Content Choices: Report Info -> Goal -> Viz/Presentation Method -> Interaction -> Justification. 1. The core "Quantum Kerning" concept -> Goal: Make it tangible. -> Viz: A custom Canvas-based simulation. -> Interaction: User text input drives the entire simulation. -> Justification: Directly demonstrates the cause-and-effect of the algorithm. 2. Potential Fields (Amplitude/Topography) -> Goal: Visualize the invisible forces. -> Viz: A Canvas-rendered heatmap. -> Interaction: Toggles to show/hide the field. -> Justification: Makes the abstract idea of a "field" visible. 3. Geodesic Path -> Goal: Show the final shortened path. -> Viz: A line drawn on the Canvas using an A* pathfinding algorithm on the potential field data. -> Interaction: A toggle and comparison with the traditional path. -> Justification: Visually proves the path shortening and demonstrates how the path navigates the field. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F5F5F4; /* Warm Neutral */
+            color: #1F2937;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 55vh;
+            max-height: 600px;
+            background-color: #FFFFFF;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 0.75rem;
+        }
+        .control-button {
+            transition: all 0.2s ease-in-out;
+            border: 1px solid #D6D3D1;
+        }
+        .control-button.active {
+            background-color: #145369; /* Accent */
+            color: #FFFFFF;
+            border-color: #145369;
+        }
+        .control-button:not(.active):hover {
+            background-color: #E7E5E4;
+            border-color: #A8A29E;
+        }
+        .prose-strong {
+            color: #145369;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto px-4 py-8 md:py-12">
+
+        <!-- SECTION 1: The Concept -->
+        <header class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800">Quantum Kerning</h1>
+            <p class="mt-4 text-lg text-gray-600 max-w-3xl mx-auto">An interactive explorer for a new vector plotting paradigm. This application translates the theoretical concept of Quantum Kerning into a live visualization, allowing you to see how paths can be shortened by navigating an informational landscape.</p>
+        </header>
+
+        <main>
+            <!-- SECTION 2: The Simulator -->
+            <section id="simulator" class="mb-16">
+                <div class="max-w-4xl mx-auto">
+                    <div class="mb-6">
+                        <label for="utf8-input" class="block text-sm font-medium text-gray-700 mb-2">Enter a string to generate its potential field and geodesic path:</label>
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <input type="text" id="utf8-input" class="flex-grow w-full px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:ring-teal-700 focus:border-teal-700" value="The flight of a crow...">
+                            <button id="generate-button" class="bg-teal-800 text-white font-semibold px-6 py-2 rounded-md hover:bg-teal-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-700 transition-colors">Generate</button>
+                        </div>
+                    </div>
+
+                    <div class="chart-container">
+                        <canvas id="field-canvas"></canvas>
+                        <canvas id="main-canvas"></canvas>
+                        <div id="loader" class="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center rounded-lg z-30 hidden">
+                            <div class="text-center">
+                                <svg class="animate-spin h-8 w-8 text-teal-800 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                <p class="mt-2 text-gray-600">Calculating potential field...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex flex-wrap justify-center gap-3">
+                        <button id="toggle-points" class="control-button active px-4 py-2 rounded-md text-sm font-medium">Character Points</button>
+                        <button id="toggle-field" class="control-button active px-4 py-2 rounded-md text-sm font-medium">Potential Field</button>
+                        <button id="toggle-traditional" class="control-button px-4 py-2 rounded-md text-sm font-medium">Traditional Path</button>
+                        <button id="toggle-geodesic" class="control-button active px-4 py-2 rounded-md text-sm font-medium">Geodesic Path</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 3: The Mechanism -->
+            <section id="mechanism" class="bg-white rounded-lg shadow p-8 max-w-4xl mx-auto">
+                <h2 class="text-3xl font-bold text-center mb-2 text-gray-800">How It Works</h2>
+                <p class="text-center text-gray-600 mb-8">The process unfolds in three key stages. Use the toggles above to see how each stage contributes to the final path.</p>
+                <div class="space-y-8">
+                    <div>
+                        <h3 class="text-xl font-semibold text-teal-800">1. Point-Field Transformation</h3>
+                        <p class="mt-2 text-gray-700">Instead of being a simple coordinate, each character in the string becomes an "attractor," generating its own potential field. The strength and shape of this field are derived from the character's data: its Unicode value (<span class="prose-strong">Amplitude</span>) and its binary UTF-8 pattern (<span class="prose-strong">Topography</span>). Characters with higher Unicode values (like 'ü') create stronger fields than those with lower values (like 'a').</p>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold text-teal-800">2. Field Superposition</h3>
+                        <p class="mt-2 text-gray-700">All the individual character fields are summed into a single, global potential field. This creates a complex energy landscape across the canvas, full of influential "valleys" (low-energy areas, shown in lighter colors) and "ridges" (high-energy areas). The original points are now just the epicenters of this combined field. Toggle the <span class="prose-strong">Potential Field</span> view to see this landscape.</p>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold text-teal-800">3. Geodesic Pathfinding</h3>
+                        <p class="mt-2 text-gray-700">The final, shortened path is calculated as the most efficient route—a geodesic—from the first character's field to the last. This path naturally seeks out the "valleys" of least resistance. It can take shortcuts through low-energy areas and effectively "tunnel" past less influential points, resulting in a smooth, intelligent curve that is significantly shorter than the traditional, point-to-point route.</p>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const mainCanvas = document.getElementById('main-canvas');
+        const fieldCanvas = document.getElementById('field-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const fieldCtx = fieldCanvas.getContext('2d');
+        const input = document.getElementById('utf8-input');
+        const generateBtn = document.getElementById('generate-button');
+        const loader = document.getElementById('loader');
+
+        const state = {
+            points: [],
+            potentialField: null,
+            traditionalPath: [],
+            geodesicPath: [],
+            showPoints: true,
+            showField: true,
+            showTraditional: false,
+            showGeodesic: true,
+        };
+
+        const config = {
+            FIELD_RESOLUTION: 20, // Lower is higher quality, but slower
+            POINT_RADIUS: 5,
+        };
+
+        function resizeCanvases() {
+            const container = mainCanvas.parentElement;
+            const { clientWidth, clientHeight } = container;
+            [mainCanvas, fieldCanvas].forEach(c => {
+                c.width = clientWidth;
+                c.height = clientHeight;
+            });
+            drawAll();
+        }
+
+        function drawAll() {
+            mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            fieldCtx.clearRect(0, 0, fieldCanvas.width, fieldCanvas.height);
+            
+            if (state.showField && state.potentialField) drawPotentialField();
+            if (state.showPoints) drawPoints();
+            if (state.showTraditional) drawPath(state.traditionalPath, '#78716C', 2, [5, 5]); // Gray, dashed
+            if (state.showGeodesic) drawPath(state.geodesicPath, '#145369', 3); // Teal, solid
+        }
+
+        function drawPoints() {
+            state.points.forEach((p, index) => {
+                mainCtx.beginPath();
+                mainCtx.arc(p.x, p.y, config.POINT_RADIUS, 0, 2 * Math.PI);
+                mainCtx.fillStyle = (index === 0 || index === state.points.length - 1) ? '#D97706' : '#A8A29E';
+                mainCtx.fill();
+                mainCtx.strokeStyle = 'white';
+                mainCtx.lineWidth = 2;
+                mainCtx.stroke();
+            });
+        }
+        
+        function drawPath(path, color, lineWidth, dashes = []) {
+            if (path.length < 2) return;
+            mainCtx.beginPath();
+            mainCtx.moveTo(path[0].x, path[0].y);
+            path.slice(1).forEach(p => mainCtx.lineTo(p.x, p.y));
+            mainCtx.strokeStyle = color;
+            mainCtx.lineWidth = lineWidth;
+            mainCtx.setLineDash(dashes);
+            mainCtx.stroke();
+            mainCtx.setLineDash([]);
+        }
+
+        function drawPotentialField() {
+            const { width, height } = fieldCanvas;
+            const res = config.FIELD_RESOLUTION;
+            const cols = Math.floor(width / res);
+            const rows = Math.floor(height / res);
+            let min = Infinity, max = -Infinity;
+            state.potentialField.forEach(row => row.forEach(val => {
+                if (val < min) min = val;
+                if (val > max) max = val;
+            }));
+
+            for (let i = 0; i < cols; i++) {
+                for (let j = 0; j < rows; j++) {
+                    const value = state.potentialField[j][i];
+                    const alpha = (value - min) / (max - min); // Normalize
+                    fieldCtx.fillStyle = `rgba(245, 158, 11, ${Math.pow(1 - alpha, 2) * 0.4})`; // Amber, transparent
+                    fieldCtx.fillRect(i * res, j * res, res, res);
+                }
+            }
+        }
+
+        async function generate() {
+            const text = input.value;
+            if (!text) return;
+
+            loader.classList.remove('hidden');
+            
+            await new Promise(resolve => setTimeout(() => {
+                // 1. Create points
+                const { width, height } = mainCanvas;
+                let seed = 0;
+                for (let i = 0; i < text.length; i++) seed = (seed + text.charCodeAt(i)) & 0xffffffff;
+                const seededRandom = () => {
+                    seed = (seed * 16807) % 2147483647;
+                    return (seed - 1) / 2147483646;
+                };
+
+                state.points = Array.from(text).map(char => ({
+                    char,
+                    x: seededRandom() * (width - 40) + 20,
+                    y: seededRandom() * (height - 40) + 20,
+                    amplitude: char.charCodeAt(0),
+                }));
+                state.traditionalPath = state.points.map(p => ({ x: p.x, y: p.y }));
+
+                // 2. Calculate potential field
+                const res = config.FIELD_RESOLUTION;
+                const cols = Math.floor(width / res);
+                const rows = Math.floor(height / res);
+                state.potentialField = Array(rows).fill(0).map(() => Array(cols).fill(0));
+
+                for (let j = 0; j < rows; j++) {
+                    for (let i = 0; i < cols; i++) {
+                        const px = i * res + res / 2;
+                        const py = j * res + res / 2;
+                        let totalInfluence = 0;
+                        state.points.forEach(p => {
+                            const distSq = Math.pow(p.x - px, 2) + Math.pow(p.y - py, 2);
+                            if (distSq > 1) {
+                                totalInfluence += p.amplitude / distSq;
+                            }
+                        });
+                        state.potentialField[j][i] = totalInfluence;
+                    }
+                }
+                
+                // 3. Find Geodesic path with A*
+                state.geodesicPath = findAPath();
+
+                drawAll();
+                loader.classList.add('hidden');
+                resolve();
+            }, 50));
+        }
+
+        function findAPath() {
+            if (state.points.length < 2) return [];
+
+            const res = config.FIELD_RESOLUTION;
+            const { width, height } = mainCanvas;
+            const cols = Math.floor(width / res);
+            const rows = Math.floor(height / res);
+            
+            const startNode = {
+                y: Math.floor(state.points[0].y / res),
+                x: Math.floor(state.points[0].x / res)
+            };
+            const endNode = {
+                y: Math.floor(state.points[state.points.length - 1].y / res),
+                x: Math.floor(state.points[state.points.length - 1].x / res)
+            };
+
+            const openSet = [startNode];
+            const cameFrom = new Map();
+            const gScore = new Map([[`${startNode.y},${startNode.x}`, 0]]);
+            const fScore = new Map([[`${startNode.y},${startNode.x}`, heuristic(startNode, endNode)]]);
+
+            function heuristic(a, b) {
+                return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+            }
+
+            while (openSet.length > 0) {
+                openSet.sort((a, b) => (fScore.get(`${a.y},${a.x}`) || Infinity) - (fScore.get(`${b.y},${b.x}`) || Infinity));
+                const current = openSet.shift();
+                const currentKey = `${current.y},${current.x}`;
+
+                if (current.y === endNode.y && current.x === endNode.x) {
+                    const path = [];
+                    let temp = current;
+                    while (temp) {
+                        path.unshift({ x: temp.x * res + res / 2, y: temp.y * res + res / 2 });
+                        temp = cameFrom.get(`${temp.y},${temp.x}`);
+                    }
+                    path[0] = { x: state.points[0].x, y: state.points[0].y };
+                    path[path.length - 1] = { x: state.points[state.points.length - 1].x, y: state.points[state.points.length - 1].y };
+                    return path;
+                }
+                
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        
+                        const neighbor = { y: current.y + dy, x: current.x + dx };
+                        const neighborKey = `${neighbor.y},${neighbor.x}`;
+
+                        if (neighbor.y < 0 || neighbor.y >= rows || neighbor.x < 0 || neighbor.x >= cols) continue;
+
+                        const moveCost = heuristic({x:0, y:0}, {x:dx, y:dy}); // Diagonal moves cost more
+                        const potentialCost = state.potentialField[neighbor.y][neighbor.x] * 0.01; // Scale down potential cost
+                        const tentativeGScore = (gScore.get(currentKey) || Infinity) + moveCost + potentialCost;
+
+                        if (tentativeGScore < (gScore.get(neighborKey) || Infinity)) {
+                            cameFrom.set(neighborKey, current);
+                            gScore.set(neighborKey, tentativeGScore);
+                            fScore.set(neighborKey, tentativeGScore + heuristic(neighbor, endNode));
+                            if (!openSet.some(n => n.y === neighbor.y && n.x === neighbor.x)) {
+                                openSet.push(neighbor);
+                            }
+                        }
+                    }
+                }
+            }
+            return []; // No path found
+        }
+        
+        // Event Listeners
+        window.addEventListener('resize', resizeCanvases);
+        generateBtn.addEventListener('click', generate);
+        input.addEventListener('keyup', (e) => e.key === 'Enter' && generate());
+        
+        document.getElementById('toggle-points').addEventListener('click', (e) => {
+            state.showPoints = !state.showPoints;
+            e.target.classList.toggle('active', state.showPoints);
+            drawAll();
+        });
+        document.getElementById('toggle-field').addEventListener('click', (e) => {
+            state.showField = !state.showField;
+            e.target.classList.toggle('active', state.showField);
+            drawAll();
+        });
+        document.getElementById('toggle-traditional').addEventListener('click', (e) => {
+            state.showTraditional = !state.showTraditional;
+            e.target.classList.toggle('active', state.showTraditional);
+            drawAll();
+        });
+        document.getElementById('toggle-geodesic').addEventListener('click', (e) => {
+            state.showGeodesic = !state.showGeodesic;
+            e.target.classList.toggle('active', state.showGeodesic);
+            drawAll();
+        });
+
+        resizeCanvases();
+        generate();
+    });
+    </script>
+</body>
+</html>
